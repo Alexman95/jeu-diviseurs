@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Jeu des Diviseurs - Terre du Milieu</title>
+  <style>
+    body {
+      font-family: 'Ringbearer', serif;
+      text-align: center;
+      background: url('https://cdn.pixabay.com/photo/2020/03/23/16/34/map-4962880_1280.jpg') no-repeat center center fixed;
+      background-size: cover;
+      color: #222222;
+      padding: 20px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      font-size: 1em;
+      font-family: inherit;
+      background-color: #f0e6d6;
+      color: #000;
+      border: 1px solid #555;
+      border-radius: 5px;
+    }
+    .factor-list, .divisors, .grid {
+      margin-top: 20px;
+    }
+    .divisor, .grid-cell {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.85);
+      color: #000;
+      padding: 4px 6px;
+      margin: 1px;
+      border-radius: 4px;
+      border: 1px solid #999;
+      cursor: pointer;
+      font-size: 0.9em;
+      min-width: 22px;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .grid-cell:hover {
+      background: rgba(255,215,0,0.9);
+      transform: scale(1.1);
+    }
+    .found {
+      background: rgba(144,238,144,1) !important;
+      font-weight: bold;
+      color: #000;
+    }
+    .incorrect {
+      background: rgba(220,20,60,0.9) !important;
+      color: #fff;
+    }
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1px;
+      max-width: 90%;
+      margin: 0 auto;
+    }
+    .divisors div {
+      display: inline-block;
+      margin: 4px;
+      padding: 4px 8px;
+      background: #e0e0e0;
+      border-radius: 4px;
+    }
+    .incorrect-log {
+      margin-top: 10px;
+      color: darkred;
+      font-weight: bold;
+    }
+    @font-face {
+      font-family: 'Ringbearer';
+      src: url('https://www.fontspace.com/ringbearer-font-f12068') format('truetype');
+    }
+    .magic-box {
+      background: rgba(255, 255, 240, 0.95);
+      border: 2px dashed goldenrod;
+      padding: 15px;
+      border-radius: 12px;
+      max-width: 500px;
+      margin: 20px auto;
+      font-size: 1.1em;
+      display: none;
+      animation: fadeIn 1s ease-in-out;
+      color: #333;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <h1>🧙‍♂️ Jeu des Diviseurs de la Terre du Milieu</h1>
+  <p>Entrez un nombre magique :</p>
+  <input type="number" id="inputNumber" />
+  <button onclick="startGame()">Commencer la Quête</button>
+
+  <div id="finalFactorDisplay" style="margin-top: 15px; font-size: 1.2em; font-weight: bold;"></div>
+
+  <div id="phase1" style="display:none;">
+    <h2>🔍 Étape 1 : Trouve les pierres de pouvoir (facteurs premiers)</h2>
+    <input type="number" id="guessFactor" placeholder="Essaye une pierre (facteur premier)"/>
+    <button onclick="checkFactor()">Forger</button>
+    <div class="factor-list" id="foundFactors"></div>
+  </div>
+
+  <div id="phase2" style="display:none;">
+    <h2>💝 Étape 2 : Révèle les Alliés de l'Anneau (diviseurs)</h2>
+    <p>Choisis parmi les nombres inscrits dans le Livre d'Elrond</p>
+    <div class="grid" id="gridContainer"></div>
+    <div class="divisors" id="discoveredDivisors"></div>
+    <div class="incorrect-log" id="incorrectAttempts"></div>
+    <div id="allyCounter"></div>
+    <div id="magicMessage" class="magic-box"></div>
+  </div>
+
+  <audio id="goodSound" src="https://freesound.org/data/previews/341/341695_5260877-lq.mp3"></audio>
+  <audio id="badSound" src="https://freesound.org/data/previews/256/256113_4486188-lq.mp3"></audio>
+  <audio id="victorySound" src="https://freesound.org/data/previews/403/403008_5121236-lq.mp3"></audio>
+
+  <script>
+    let number = 0;
+    let originalNumber = 0;
+    let remaining = 0;
+    let primeFactors = [];
+    let foundDivisors = new Set();
+    let incorrectSet = new Set();
+    let passwordParts = {160: null, 180: null};
+
+    const goodSound = document.getElementById("goodSound");
+    const badSound = document.getElementById("badSound");
+    const victorySound = document.getElementById("victorySound");
+
+    function showMagicMessage(text) {
+      const box = document.getElementById('magicMessage');
+      box.innerHTML = text;
+      box.style.display = 'block';
+    }
+
+    function startGame() {
+      number = parseInt(document.getElementById('inputNumber').value);
+      if (isNaN(number) || number < 2) {
+        alert('Choisis un nombre supérieur ou égal à 2');
+        return;
+      }
+      originalNumber = number;
+      remaining = number;
+      primeFactors = [];
+      foundDivisors = new Set();
+      incorrectSet = new Set();
+      document.getElementById('phase1').style.display = 'block';
+      document.getElementById('foundFactors').innerHTML = '';
+      document.getElementById('phase2').style.display = 'none';
+      document.getElementById('incorrectAttempts').innerHTML = '';
+      document.getElementById('finalFactorDisplay').innerHTML = '';
+      document.getElementById('magicMessage').style.display = 'none';
+    }
+
+    function checkFactor() {
+      const input = parseInt(document.getElementById('guessFactor').value);
+      if (isNaN(input)) return;
+
+      if (!isPrime(input)) {
+        alert('Ce n\'est pas une pierre de pouvoir (nombre premier).');
+        return;
+      }
+
+      if (remaining % input === 0) {
+        primeFactors.push(input);
+        remaining /= input;
+
+        let display = primeFactors.join(' × ');
+        document.getElementById('foundFactors').innerHTML = `<strong>${display}</strong>`;
+
+        if (remaining === 1) {
+          const finalDisplay = `${originalNumber} = ${display}`;
+          document.getElementById('finalFactorDisplay').innerHTML = finalDisplay;
+          goToPhase2();
+        }
+      } else {
+        alert(`${input} ne divise pas ${remaining}`);
+      }
+
+      document.getElementById('guessFactor').value = '';
+    }
+
+    function isPrime(n) {
+      if (n < 2) return false;
+      for (let i = 2; i <= Math.sqrt(n); i++) {
+        if (n % i === 0) return false;
+      }
+      return true;
+    }
+
+    function goToPhase2() {
+      document.getElementById('phase1').style.display = 'none';
+      document.getElementById('phase2').style.display = 'block';
+      generateGridDivisors();
+    }
+
+    function generateGridDivisors() {
+      const container = document.getElementById('gridContainer');
+      const display = document.getElementById('discoveredDivisors');
+      container.innerHTML = '';
+      display.innerHTML = '<h3>Alliés trouvés :</h3>';
+      document.getElementById('allyCounter').innerHTML = `Nombre d'Alliés : 0 / ${getAllDivisors(originalNumber).length}`;
+
+      for (let i = 1; i <= originalNumber; i++) {
+        const div = document.createElement('div');
+        div.className = 'grid-cell';
+        div.textContent = i;
+        div.onclick = () => handleDivisorClick(div, i);
+        container.appendChild(div);
+      }
+    }
+
+    function handleDivisorClick(elem, val) {
+      const incorrectLog = document.getElementById('incorrectAttempts');
+
+      if (originalNumber % val === 0) {
+        if (!foundDivisors.has(val)) {
+          foundDivisors.add(val);
+          elem.classList.add('found');
+          goodSound.play();
+
+          const display = document.getElementById('discoveredDivisors');
+          display.innerHTML += `<div>${val}</div>`;
+
+          const total = getAllDivisors(originalNumber).length;
+          const count = foundDivisors.size;
+          document.getElementById('allyCounter').innerHTML = `Nombre d'Alliés : ${count} / ${total}`;
+
+          if (count === total) {
+            if (incorrectSet.size === 0) {
+              if (originalNumber === 160) {
+                passwordParts[160] = "111";
+                showMagicMessage("✅ 1ère partie du mot de passe : <strong>111</strong>");
+              } else if (originalNumber === 180) {
+                passwordParts[180] = "bilbon";
+                showMagicMessage("✅ 2ème partie du mot de passe : <strong>bilbon</strong>");
+              }
+
+              if (passwordParts[160] && passwordParts[180]) {
+                showMagicMessage("✨ Bravo ! Mot de passe complet : <strong>111bilbon</strong>");
+              }
+            } else {
+              showMagicMessage("🟡 Bien joué ! Mais tu as fait des erreurs. Réessaye sans faute pour obtenir la partie du mot de passe.");
+            }
+            victorySound.play();
+          }
+        }
+      } else {
+        elem.classList.add('incorrect');
+        badSound.play();
+        incorrectSet.add(val);
+        incorrectLog.innerHTML = `❌ Tentatives incorrectes : ${Array.from(incorrectSet).join(', ')}`;
+      }
+    }
+
+    function getAllDivisors(n) {
+      const divs = new Set();
+      for (let i = 1; i <= n; i++) {
+        if (n % i === 0) {
+          divs.add(i);
+        }
+      }
+      return Array.from(divs);
+    }
+  </script>
+</body>
+</html>
